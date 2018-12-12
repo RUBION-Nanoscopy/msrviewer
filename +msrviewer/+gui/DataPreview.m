@@ -1,5 +1,14 @@
 classdef DataPreview < uix.HBox
     
+    properties
+        
+        % Callbacks
+        NextClicked = []
+        PrevClicked = []
+        LastClicked = []
+        FirstClicked = []
+    end
+    
     properties (Dependent)
         Data
         Info
@@ -53,19 +62,23 @@ classdef DataPreview < uix.HBox
             );
             self.next_btn = uicontrol(...
                 'Parent', bbox2, ...
-                'String', '>' ...
+                'String', '>', ...
+                'Callback', @self.call_callback ...
             );
             self.last_btn = uicontrol(...
                 'Parent', bbox2, ...
-                'String', '>>' ...
+                'String', '>>', ...
+                'Callback', @self.call_callback ...
             );
             self.first_btn = uicontrol(...
                 'Parent', bbox1, ...
-                'String', '<<' ...
+                'String', '<<', ...
+                'Callback', @self.call_callback ...
             );
             self.prev_btn = uicontrol(...
                 'Parent', bbox1, ...
-                'String', '<' ...
+                'String', '<', ...
+                'Callback', @self.call_callback ...
             );
             
 
@@ -135,6 +148,34 @@ classdef DataPreview < uix.HBox
             imagesc(self.ax, self.data_);
             self.ax.DataAspectRatio=[1 1 1];
             colormap(hot);
+        end
+        
+        function call_callback(self, src, ~)
+            if src == self.next_btn 
+                cb = self.NextClicked;
+                cbname = 'NextClicked';
+            elseif src == self.prev_btn
+                cb = self.PrevClicked;
+                cbname = 'PrevClicked';
+            elseif src == self.first_btn
+                cb = self.FirstClicked;
+                cbname = 'FirstClicked';
+            elseif src == self.last_btn
+                cb = self.LastClicked;
+                cbname = 'LastClicked';
+            end
+            
+            if isa(cb, 'function_handle')
+                cb();
+            elseif iscell(cb) && isa(cb{1}, 'function_handle')
+                args = cb(2:end);
+                cb = cb{1};
+                cb(args{:}); %#ok<NOEFF>
+            else
+                error('MSRViewer:WrongCallbackFormat', ...
+                    'The callback for %s should either be a function handle or a cell array with the first element being a function handle and the other elements being passed as arguments.', ...
+                    cbname );
+            end
         end
     end
 end
