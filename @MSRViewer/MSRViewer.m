@@ -3,158 +3,210 @@ classdef MSRViewer < handle
     
     properties
         Figure
+        
         Data
-        Ax
+        Meta
+        
         IconCounter
         SkipFirst
         Title
         FitSelector
+        Ax
         PsfAx
         DeconAx
+        LineProfileAx 
+        TabPanel
         MainHB
         IData
         PSF
         DeconRes = {}
         DampingEdit
+        AxSelection
+
+        FitResultTable
+        
+        Listeners = struct();
     end
     
     properties ( SetObservable )
         Idx
     end
     
+    properties %(Access = protected)
+        gui = struct()
+        data_info = struct()
+        internals = struct()
+        ome_reader 
+    end
+    
+    properties ( SetObservable )
+        previewed_data = NaN;
+    end
+    
     methods
-        function self = MSRViewer( data )
-            if ~iscell(data)
-                try 
-                    self.Data = bfopen(data);
-                catch
-                    error('MSRViewer:CouldNotReadFile','Could not open %s', data);
-                end
-            else
-                self.Data = data;
-            end
+        function self = MSRViewer( varargin )
+            
             
             self.composeGUI();
-            self.addlistener('Idx', 'PostSet', ...
-                @(~,~)self.show() ...
+            
+            self.Listeners.Preview = addlistener(self,...
+                'previewed_data', 'PostSet', ...
+                @(~, ~)self.preview_msr_data ...
             );
-            self.Idx = 1;
+            
+            
+            if nargin > 0
+                self.load_msr_data(varargin{1});
+            end
+            
+            
+                
+            
         end
     end
     
     methods ( Access = protected )
         function composeGUI(self)
-            scsz = phutils.gui.getScreensize();
+            % scsz = phutils.gui.getScreensize();
+            
+            % The GUI consists of three parts:
+            % Main axes 
+            % Analysis Tab
+            % Control 
             self.Figure = figure(...
-                'Position', [round((scsz(1)-768)/2) round(scsz(2)*2/3)-512/2 768 512] ...
+                ... %'Position', [round((scsz(1)-1280)/2) round(scsz(2)*2/3)-1280/2 1280 512], ...
+                'Toolbar', 'none',...
+                'Menubar', 'none', ...
+                'WindowState', 'maximized', ... 
+                'Name', 'MSRViewer' ...
             );
-            hb = uix.HBox('Parent', self.Figure);
-            self.Ax = axes('Parent', hb);
-            self.DeconAx = axes('Parent', uicontainer('Parent', hb));
-            vb = uix.VBox('Parent', hb);
+        
+            self.addMenu();
             
-            con = uix.HBox(...
-                'Parent', vb ...
-            );
-            b1 = uicontrol('Parent',con, ...
-                'String', '<', ...
-                'Callback', @(~,~)self.shift(-1) ...
-            );
-            self.IconCounter = uix.Text('Parent',con);
-            b2 = uicontrol('Parent',con, ...
-                'String', '>', ...
-                'Callback', @(~,~)self.shift(1) ...
+            
+            hb = uix.HBox(...
+                'Parent', self.Figure, ...
+                'Padding', 5 ...
             );
             
-            con.Widths = [32 -1 32];
+            vboxsettings = {'Spacing', 5};
+        
+            lvbox = uix.VBox(...
+                'Parent', hb, ...
+                vboxsettings{:} ...
+            );
+            rvbox = uix.VBox(...
+                'Parent', hb, ...
+                vboxsettings{:} ...
+            );
             
-            self.SkipFirst = uicontrol('Parent',vb, ...
-                'Style', 'checkbox', ...
-                'String','Skip first column', ...
-                'Callback', @(~,~)self.toggleSkip() ...
+            hb.Widths = [-2 -3];
+            
+            % The left VBox lvbox has three rows. For sinmplicity, I surround
+            % every row with a hbox.
+            
+            self.gui.l_row1 = uix.HBox('Parent', lvbox);
+            self.gui.l_row2 = uix.HBox('Parent', lvbox);
+            self.gui.l_row3 = uix.HBox('Parent', lvbox);
+            
+            lvbox.Heights = [-1 -1 -1];
+            
+            % The right vbox consists of three rows, too.
+            
+            self.gui.r_row1 = uix.HBox('Parent', rvbox);
+            self.gui.r_row2 = uix.HBox('Parent', rvbox);
+            self.gui.r_row3 = uix.HBox('Parent', rvbox);
+            
+            rvbox.Heights = [64 -1 -8];
+            
+            self.compose_gui_psf();
+            self.compose_gui_decon();
+            self.compose_gui_orig();
+            
+            self.compose_gui_toolbar();
+            
+            self.Ax = phutils.gui.ThreeChannelImage(...
+                'Parent', self.gui.r_row3 ...
             );
-            bft = uix.Panel(...
-                'Parent',vb,...
-                'Title','Fit beads'...
-            );
-            psf = uix.Panel(...
-                'Parent', vb, ...
-                'Title', 'PSF' ...
-            );
-            self.PsfAx = msrviewer.PSFField('Parent', psf');
-            self.FitSelector = uibuttongroup(...
-                'Parent', bft ...
-            );
-            uicontrol(...
-                'Parent', self.FitSelector, ...
-                'String', 'Gaussian', ...
-                'Position',[5 29 123, 32], ...
-                'Style', 'radio' ...
-            );
-            uicontrol(...
-                'Parent', self.FitSelector, ...
-                'String', 'Lorentzian', ...
-                'Position',[5 5 123, 32], ... 
-                'Style', 'radio' ...
-            );
-            dp = uix.Panel(...
-                'Title', 'RL-Deconvolution', ...
-                'Parent', vb );
-            dvb = uix.VBox('Parent', dp);
-            uicontrol(...
-                'Parent', dvb, ...
-                'Callback', @(~,~)self.doDecon(), ...
-                'String', 'Start' ...
-            );
-            self.DampingEdit = uicontrol(...
-                'Style','Edit', ...
-                'Parent', dvb ...
-            );
-            hb.Widths = [-1 0 192];
-            vb.Heights=[32 32 128 128+64 128];
-            self.MainHB = hb;
+            
         end
         
+        compose_gui_psf( self )
+        compose_gui_decon( self )
+        compose_gui_orig( self )
+        compose_gui_toolbar( self )
+        
+        menu_file_open( self )
+        
+        load_msr_data ( self, data )
+        
+        preview_msr_data ( self )
+        
+        
         function show(self, varargin)
-            autoskip = true;
-            if nargin == 2
-                autoskip = varargin{1};
-            end
-            d = self.Data{self.Idx, 1}{1};
-            meta = self.Data{self.Idx,2};
-            [xpx, ypx] = size(d);
-            imsz = meta.get('Lengths');
-            scalex = xpx/imsz(1).get(0);
-            scaley = ypx/imsz(1).get(1);
-            if autoskip
-                if all(d(:,1) > d(:,2))
-                    imagesc(self.Ax, d(:,2:end));
-                    self.SkipFirst.Value = true;
-                    self.Ax.XTick=[1,xpx-1];
-                    self.Ax.XTickLabels={1/scalex, imsz(1).get(0)};
-                else
-                    imagesc(self.Ax, d);
-                    self.SkipFirst.Value = false;
-                    self.Ax.XTick=[1,xpx];
-                    self.Ax.XTickLabels={0, imsz(1).get(0)};
-                end
-            else
-                if self.SkipFirst.Value == true
-                    imagesc(self.Ax, d(:,2:end));
-                    self.Ax.XTick=[1,xpx-1];
-                    self.Ax.XTickLabels={1/scalex, imsz(1).get(0)};
-                else
-                    imagesc(self.Ax, d);
-                    self.Ax.XTick=[1,xpx];
-                    self.Ax.XTickLabels={0, imsz(1).get(0)};
-                end
-            end
-            self.Ax.YTick = [1 ypx];
-            self.Ax.YTickLabels={0, imsz(1).get(1)};
-            colormap(self.Ax, hot);
-            self.IconCounter.String = sprintf('%g/%g', self.Idx, size(self.Data,1));
-            
-            self.Title = title(self.Ax,meta.get('Name'));
+%             autoskip = true;
+%             if nargin == 2
+%                 autoskip = varargin{1};
+%             end
+%             d = uint16(self.Data{self.Idx, 1}{1});
+%             meta = self.Data{self.Idx,2};
+%             [xpx, ypx] = size(d);
+%             imsz = meta.get('Lengths');
+%             scalex = xpx/imsz(1).get(0);
+%             scaley = ypx/imsz(1).get(1);
+%             if autoskip
+%                 if all(d(:,1) > d(:,2))
+%                     
+%                     imagesc(self.Ax, d(:,2:end),'HitTest','off');
+%                     self.SkipFirst.Value = true;
+%                     self.Ax.XTick=[1,xpx-1];
+%                     self.Ax.XTickLabels={1/scalex, imsz(1).get(0)};
+%                 else
+%                     imagesc(self.Ax, d,'HitTest','off');
+%                     self.SkipFirst.Value = false;
+%                     self.Ax.XTick=[1,xpx];
+%                     self.Ax.XTickLabels={0, imsz(1).get(0)};
+%                 end
+%             else
+%                 if self.SkipFirst.Value == true
+%                     imagesc(self.Ax, d(:,2:end),'HitTest','off');
+%                     self.Ax.XTick=[1,xpx-1];
+%                     self.Ax.XTickLabels={1/scalex, imsz(1).get(0)};
+%                 else
+%                     imagesc(self.Ax, d,'HitTest','off');
+%                     self.Ax.XTick=[1,xpx];
+%                     self.Ax.XTickLabels={0, imsz(1).get(0)};
+%                 end
+%             end
+%             self.Ax.YTick = [1 ypx];
+%             self.Ax.YTickLabels={0, imsz(1).get(1)};
+%             colormap(self.Ax, hot);
+%             self.Ax.YLim = [0 size(d,2)];
+%             self.Ax.XLim = [0 size(d,1)];
+%             self.Ax.DataAspectRatio=[1 1 1];
+%             self.IconCounter.String = sprintf('%g/%g', self.Idx, size(self.Data,1));
+%             
+%             self.Title = title(self.Ax,meta.get('Name'));
+        end
+        function addMenu(self)
+            file = uimenu(...
+                'Parent', self.Figure, ...
+                'Text',  'File' ...
+            );
+            f_open = uimenu(...
+                'Parent', file, ...
+                'MenuSelectedFcn', @(~,~)self.menu_file_open, ...
+                'Text', 'Open'...
+            );
+            f_save = uimenu(...
+                'Parent', file, ...
+                'Text', 'Save' ...
+            );
+            f_quit = uimenu(...
+                'Parent', file, ...
+                'Separator','on', ...
+                'Text', 'Quit' ...
+            );
         end
         
         function shift( self, by)
@@ -195,7 +247,7 @@ classdef MSRViewer < handle
                 q = quantile(self.IData(:), .15);
                 w = ones(size(self.IData));
                 w(self.IData>q) = 1;
-                w(self.IData<=q) = .3;
+                w(self.IData<=q) = .1;
                 damp = str2double(self.DampingEdit.String);
                 if isempty(damp)  || isnan(damp)
                     damp = 0;
@@ -258,6 +310,62 @@ classdef MSRViewer < handle
             psf_size = round(2 * xscale * 2^xfaktor);
             self.PSF = self.PsfAx.getPSF(psf_size, xscale*2^xfaktor);
             fprintf('Interpolating finished.\n');
+        end
+        function update_line_profile(self, evt, src)
+            p = improfile(self.Ax.Children(2).CData, ...
+                self.AxSelection.Selection(:,1), ...
+                self.AxSelection.Selection(:,2)...
+            );
+            plot(self.LineProfileAx, p);
+        end
+        function fit_to_profile(self)
+            p = improfile(self.Ax.Children(2).CData, ...
+                self.AxSelection.Selection(:,1), ...
+                self.AxSelection.Selection(:,2)...
+            );
+            
+            if strcmp(self.FitSelector.SelectedObject.String, 'Gaussian')
+                ffunc = @(a,BG,x0,fwhm,x)(...
+                    BG + a.* ... 
+                    exp(...
+                        -((x-x0).^2) ... % Nominator
+                        /...
+                        ((fwhm/(2*sqrt(2*log(2)))).^2) ... % denominator
+                    ) ...
+                );
+                ftype = 'Gaussian';
+            elseif strcmp(self.FitSelector.SelectedObject.String, 'Lorentzian')
+                ffunc = @(a,BG,x0,fwhm,x)(...
+                    BG + a.* ...
+                    (fwhm/2).^2 ./ ((x-x0).^2+(fwhm/2).^2) ...
+                );
+                ftype = 'Lorentz';
+            end
+            idx = find(p == max(p));
+            if numel(idx) > 1
+                idx = idx(1);
+            end
+            xpos = 1:numel(p);
+            fo = fitoptions(...
+               'Method', 'NonLinearLeastSquares', ...
+               'Lower',[0,0,0,0],...
+               'Upper',[max(p),max(p), numel(p), numel(p)/2],...
+               'StartPoint',[max(p), 0, xpos(idx), 1]);
+           
+           
+            F = fit((1:numel(p))', p, ffunc, fo);
+            self.LineProfileAx.NextPlot = 'add';
+            fplot = plot(self.LineProfileAx, ...
+                (1:numel(p))', feval(F, (1:numel(p))'), 'r');
+            self.LineProfileAx.NextPlot = 'replace';
+            ci = confint(F);
+            d = uint16(self.Data{self.Idx, 1}{1});
+            meta = self.Data{self.Idx,2};
+            [xpx, ypx] = size(d);
+            imsz = meta.get('Lengths');
+            scalex = xpx/imsz(1).get(0);
+            scaley = ypx/imsz(1).get(1);
+            self.FitResultTable.Data(end+1,:) = {ftype, F.fwhm/scalex ,(F.fwhm - ci(1,4))/scalex, true};
         end
     end
 end
