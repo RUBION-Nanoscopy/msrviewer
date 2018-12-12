@@ -12,6 +12,7 @@ classdef DataPreview < uix.HBox
     properties (Dependent)
         Data
         Info
+        Text
     end
     
     properties (Access = protected) 
@@ -130,6 +131,12 @@ classdef DataPreview < uix.HBox
         end
         function info = get.Info( self )
             info = self.info_tbl.Data;
+        end
+        function set.Text(self, txt)
+            self.counter.String = txt;
+        end
+        function txt = get.Text(self)
+            txt = self.counter.String;
         end
     end
     methods (Access = protected)
