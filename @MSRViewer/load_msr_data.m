@@ -18,7 +18,7 @@ self.data_info.SeriesPlanesCount = zeros(self.data_info.SeriesCount,1);
 
 for series = 0:self.data_info.SeriesCount - 1 % It uses java-indexing!
     self.ome_reader.setSeries(series);
-    self.data_info.SeriesPlaneCount(series+1) = self.ome_reader.getImageCount();
+    self.data_info.SeriesPlanesCount(series+1) = self.ome_reader.getImageCount();
 end
 self.ome_reader.close();
 

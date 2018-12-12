@@ -125,6 +125,7 @@ classdef MSRViewer < handle
             
             self.compose_gui_toolbar();
             
+            
             self.Ax = phutils.gui.ThreeChannelImage(...
                 'Parent', self.gui.r_row3 ...
             );
@@ -141,7 +142,7 @@ classdef MSRViewer < handle
         load_msr_data ( self, data )
         
         preview_msr_data ( self )
-        
+        change_preview( self, val )
         
         function show(self, varargin)
 %             autoskip = true;
