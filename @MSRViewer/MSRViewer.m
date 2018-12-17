@@ -1,6 +1,5 @@
 classdef MSRViewer < handle
     
-    
     properties
         Figure
         
@@ -140,9 +139,12 @@ classdef MSRViewer < handle
         menu_file_open( self )
         
         load_msr_data ( self, data )
+        d = get_msr_plane(self)
         
         preview_msr_data ( self )
         change_preview( self, val )
+        set_channel( self, channel )
+        
         
         function show(self, varargin)
 %             autoskip = true;
